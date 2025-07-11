@@ -9,31 +9,63 @@ Mappings:
       AMI: ami-05ee755be0cd7555c
 
 Parameters:
+  # Environment Configuration
   EnvironmentType:
     Type: String
     AllowedValues: [Test, Prod]
-    Description: Type d'environnement (Test ou Prod)
-
-  SSHKeyName:
-    Type: AWS::EC2::KeyPair::KeyName
-    Description: Nom de la cle SSH EC2
-
-  InstallS3Bucket:
-    Type: String
-    MinLength: 3
-    AllowedPattern: "^[a-zA-Z0-9\\-]+$"
-    ConstraintDescription: Doit etre alphanumerique avec tirets.
+    Description: Type d'environnement (Test ou Prod) - affecte la taille des instances
 
   DNSPrefix:
     Type: String
     AllowedPattern: "^([a-z]+\\.)?$"
     ConstraintDescription: Doit etre vide ou une chaine de lettres minuscules se terminant par un point.
+    Description: Prefixe DNS pour nommer les serveurs (ex. "team1." donnera team1.www, team1.api, etc.)
 
+  # SSH Access
+  SSHKeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Cle SSH EC2 pour acceder aux instances
+
+  # S3 Configuration for Application Files
+  InstallS3Bucket:
+    Type: String
+    MinLength: 3
+    AllowedPattern: "^[a-zA-Z0-9\\-]+$"
+    ConstraintDescription: Doit etre alphanumerique avec tirets.
+    Description: Nom du bucket S3 contenant les fichiers d'application (sans s3://)
+
+  # S3 Paths for UserData Scripts
+  WebUserDataS3:
+    Type: String
+    Description: Chemin S3 complet vers le script Website.sh (ex. s3://bucket/scripts/Website.sh)
+    AllowedPattern: "^s3://[a-zA-Z0-9\\-\\.]+/.*\\.sh$"
+    ConstraintDescription: Must be a valid S3 path to a .sh file (e.g., s3://bucket/path/Website.sh)
+
+  ApiUserDataS3:
+    Type: String
+    Description: Chemin S3 complet vers le script WebService.sh (ex. s3://bucket/scripts/WebService.sh)
+    AllowedPattern: "^s3://[a-zA-Z0-9\\-\\.]+/.*\\.sh$"
+    ConstraintDescription: Must be a valid S3 path to a .sh file (e.g., s3://bucket/path/WebService.sh)
+
+  DBUserDataS3:
+    Type: String
+    Description: Chemin S3 complet vers le script MariaDB.sh (ex. s3://bucket/scripts/MariaDB.sh)
+    AllowedPattern: "^s3://[a-zA-Z0-9\\-\\.]+/.*\\.sh$"
+    ConstraintDescription: Must be a valid S3 path to a .sh file (e.g., s3://bucket/path/MariaDB.sh)
+
+  LicenceUserDataS3:
+    Type: String
+    Description: Chemin S3 complet vers le script SecureServer.sh (ex. s3://bucket/scripts/SecureServer.sh)
+    AllowedPattern: "^s3://[a-zA-Z0-9\\-\\.]+/.*\\.sh$"
+    ConstraintDescription: Must be a valid S3 path to a .sh file (e.g., s3://bucket/path/SecureServer.sh)
+
+  # Database Configuration
   DBUser:
     Type: String
     MinLength: 3
     AllowedPattern: "^[a-zA-Z0-9]+$"
     ConstraintDescription: Doit etre alphanumerique et avoir au moins 3 caracteres.
+    Description: Nom d'utilisateur pour la base de donnees MariaDB
 
   DBPassword:
     Type: String
@@ -41,30 +73,7 @@ Parameters:
     MinLength: 8
     AllowedPattern: "(?=.*[a-z])(?=.*[A-Z])(?=.*[^a-zA-Z0-9]).{8,}"
     ConstraintDescription: Doit contenir une minuscule, majuscule, caractere special, et min 8 caracteres.
-
-  WebUserDataS3:
-    Type: String
-    Description: S3 bucket link pointing to the Website userdata script
-    AllowedPattern: "^s3://[a-zA-Z0-9\\-\\.]+/.*\\.sh$"
-    ConstraintDescription: Must be a valid S3 path to a .sh file (e.g., s3://bucket/path/Website.sh)
-
-  ApiUserDataS3:
-    Type: String
-    Description: S3 bucket link pointing to the WebService userdata script
-    AllowedPattern: "^s3://[a-zA-Z0-9\\-\\.]+/.*\\.sh$"
-    ConstraintDescription: Must be a valid S3 path to a .sh file (e.g., s3://bucket/path/WebService.sh)
-
-  DBUserDataS3:
-    Type: String
-    Description: S3 bucket link pointing to the MariaDB userdata script
-    AllowedPattern: "^s3://[a-zA-Z0-9\\-\\.]+/.*\\.sh$"
-    ConstraintDescription: Must be a valid S3 path to a .sh file (e.g., s3://bucket/path/MariaDB.sh)
-
-  LicenceUserDataS3:
-    Type: String
-    Description: S3 bucket link pointing to the SecureServer userdata script
-    AllowedPattern: "^s3://[a-zA-Z0-9\\-\\.]+/.*\\.sh$"
-    ConstraintDescription: Must be a valid S3 path to a .sh file (e.g., s3://bucket/path/SecureServer.sh)
+    Description: Mot de passe pour la base de donnees MariaDB (masque dans l'interface)
 
 Conditions:
   IsProd: !Equals [ !Ref EnvironmentType, "Prod" ]
