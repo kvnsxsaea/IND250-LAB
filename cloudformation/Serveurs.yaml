@@ -10,12 +10,12 @@ Mappings:
 
 Parameters:
   # Environment Configuration
-  EnvironmentType:
+  Environment:
     Type: String
     AllowedValues: [Test, Prod]
     Description: Type d'environnement (Test ou Prod) - affecte la taille des instances
 
-  DNSPrefix:
+  TeamPrefix:
     Type: String
     AllowedPattern: "^([a-z]+\\.)?$"
     ConstraintDescription: Doit etre vide ou une chaine de lettres minuscules se terminant par un point.
@@ -27,7 +27,7 @@ Parameters:
     Description: Cle SSH EC2 pour acceder aux instances
 
   # S3 Configuration for Application Files
-  InstallS3Bucket:
+  AppFilesBucket:
     Type: String
     MinLength: 3
     AllowedPattern: "^[a-zA-Z0-9\\-]+$"
@@ -35,39 +35,39 @@ Parameters:
     Description: Nom du bucket S3 contenant les fichiers d'application (sans s3://)
 
   # S3 Paths for UserData Scripts
-  WebUserDataS3:
+  WebsiteScript:
     Type: String
     Description: Chemin S3 complet vers le script Website.sh (ex. s3://bucket/scripts/Website.sh)
     AllowedPattern: "^s3://[a-zA-Z0-9\\-\\.]+/.*\\.sh$"
     ConstraintDescription: Must be a valid S3 path to a .sh file (e.g., s3://bucket/path/Website.sh)
 
-  ApiUserDataS3:
+  ApiScript:
     Type: String
     Description: Chemin S3 complet vers le script WebService.sh (ex. s3://bucket/scripts/WebService.sh)
     AllowedPattern: "^s3://[a-zA-Z0-9\\-\\.]+/.*\\.sh$"
     ConstraintDescription: Must be a valid S3 path to a .sh file (e.g., s3://bucket/path/WebService.sh)
 
-  DBUserDataS3:
+  DatabaseScript:
     Type: String
     Description: Chemin S3 complet vers le script MariaDB.sh (ex. s3://bucket/scripts/MariaDB.sh)
     AllowedPattern: "^s3://[a-zA-Z0-9\\-\\.]+/.*\\.sh$"
     ConstraintDescription: Must be a valid S3 path to a .sh file (e.g., s3://bucket/path/MariaDB.sh)
 
-  LicenceUserDataS3:
+  LicenseScript:
     Type: String
     Description: Chemin S3 complet vers le script SecureServer.sh (ex. s3://bucket/scripts/SecureServer.sh)
     AllowedPattern: "^s3://[a-zA-Z0-9\\-\\.]+/.*\\.sh$"
     ConstraintDescription: Must be a valid S3 path to a .sh file (e.g., s3://bucket/path/SecureServer.sh)
 
   # Database Configuration
-  DBUser:
+  DatabaseUser:
     Type: String
     MinLength: 3
     AllowedPattern: "^[a-zA-Z0-9]+$"
     ConstraintDescription: Doit etre alphanumerique et avoir au moins 3 caracteres.
     Description: Nom d'utilisateur pour la base de donnees MariaDB
 
-  DBPassword:
+  DatabasePassword:
     Type: String
     NoEcho: true
     MinLength: 8
@@ -76,14 +76,14 @@ Parameters:
     Description: Mot de passe pour la base de donnees MariaDB (masque dans l'interface)
 
 Conditions:
-  IsProd: !Equals [ !Ref EnvironmentType, "Prod" ]
+  IsProd: !Equals [ !Ref Environment, "Prod" ]
 
 Resources:
 
   WebLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
-      LaunchTemplateName: !Sub MenuGraphique-Web-${EnvironmentType}
+      LaunchTemplateName: !Sub MenuGraphique-Web-${Environment}
       LaunchTemplateData:
         InstanceType: !If [ IsProd, t3.small, t3.micro ]
         KeyName: !Ref SSHKeyName
@@ -94,14 +94,14 @@ Resources:
           Fn::Base64: !Sub |
             #!/bin/bash
             # Download and execute Website script with S3 bucket argument
-            aws s3 cp ${WebUserDataS3} /tmp/Website.sh
+            aws s3 cp ${WebsiteScript} /tmp/Website.sh
             chmod +x /tmp/Website.sh
-            /tmp/Website.sh s3://${InstallS3Bucket}/ind250-MenuGraphique/
+            /tmp/Website.sh s3://${AppFilesBucket}/ind250-MenuGraphique/
 
   ApiLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
-      LaunchTemplateName: !Sub MenuGraphique-Api-${EnvironmentType}
+      LaunchTemplateName: !Sub MenuGraphique-Api-${Environment}
       LaunchTemplateData:
         InstanceType: !If [ IsProd, t3.large, t3.small ]
         KeyName: !Ref SSHKeyName
@@ -112,14 +112,14 @@ Resources:
           Fn::Base64: !Sub |
             #!/bin/bash
             # Download and execute WebService script with S3 bucket argument
-            aws s3 cp ${ApiUserDataS3} /tmp/WebService.sh
+            aws s3 cp ${ApiScript} /tmp/WebService.sh
             chmod +x /tmp/WebService.sh
-            /tmp/WebService.sh s3://${InstallS3Bucket}/ind250-Artifact-main/
+            /tmp/WebService.sh s3://${AppFilesBucket}/ind250-Artifact-main/
 
   DBLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
-      LaunchTemplateName: !Sub MenuGraphique-DB-${EnvironmentType}
+      LaunchTemplateName: !Sub MenuGraphique-DB-${Environment}
       LaunchTemplateData:
         InstanceType: !If [ IsProd, t3.xlarge, t3.small ]
         KeyName: !Ref SSHKeyName
@@ -130,14 +130,14 @@ Resources:
           Fn::Base64: !Sub |
             #!/bin/bash
             # Download and execute MariaDB script (no S3 bucket argument needed)
-            aws s3 cp ${DBUserDataS3} /tmp/MariaDB.sh
+            aws s3 cp ${DatabaseScript} /tmp/MariaDB.sh
             chmod +x /tmp/MariaDB.sh
             /tmp/MariaDB.sh
 
   LicenceLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
-      LaunchTemplateName: !Sub MenuGraphique-Licence-${EnvironmentType}
+      LaunchTemplateName: !Sub MenuGraphique-Licence-${Environment}
       LaunchTemplateData:
         InstanceType: t3.small
         KeyName: !Ref SSHKeyName
@@ -148,9 +148,9 @@ Resources:
           Fn::Base64: !Sub |
             #!/bin/bash
             # Download and execute SecureServer script with S3 bucket argument
-            aws s3 cp ${LicenceUserDataS3} /tmp/SecureServer.sh
+            aws s3 cp ${LicenseScript} /tmp/SecureServer.sh
             chmod +x /tmp/SecureServer.sh
-            /tmp/SecureServer.sh s3://${InstallS3Bucket}/ind250-SecureServer/
+            /tmp/SecureServer.sh s3://${AppFilesBucket}/ind250-SecureServer/
 
   WebServerInstance:
     Type: AWS::EC2::Instance
@@ -161,7 +161,7 @@ Resources:
       SubnetId: !ImportValue MenuGraphique-PublicSubnet
       Tags:
         - Key: Name
-          Value: !Sub ${DNSPrefix}www
+          Value: !Sub ${TeamPrefix}www
 
   ApiServerInstance:
     Type: AWS::EC2::Instance
@@ -172,7 +172,7 @@ Resources:
       SubnetId: !ImportValue MenuGraphique-PublicSubnet
       Tags:
         - Key: Name
-          Value: !Sub ${DNSPrefix}api
+          Value: !Sub ${TeamPrefix}api
 
   DBServerInstance:
     Type: AWS::EC2::Instance
@@ -183,7 +183,7 @@ Resources:
       SubnetId: !ImportValue MenuGraphique-PrivateSubnet1
       Tags:
         - Key: Name
-          Value: !Sub ${DNSPrefix}bd
+          Value: !Sub ${TeamPrefix}bd
 
   LicenceServerInstance:
     Type: AWS::EC2::Instance
@@ -194,7 +194,7 @@ Resources:
       SubnetId: !ImportValue MenuGraphique-PrivateSubnet1
       Tags:
         - Key: Name
-          Value: !Sub ${DNSPrefix}licence
+          Value: !Sub ${TeamPrefix}licence
 
 Outputs:
   WebPublicIP:

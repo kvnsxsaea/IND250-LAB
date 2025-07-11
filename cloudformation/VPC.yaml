@@ -2,39 +2,43 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: VPC avec 3 sous-reseaux (1 public, 2 prives) avec table de routage publique.
 
 Parameters:
+  # Project Configuration
   ProjectName:
     Type: String
     AllowedPattern: "^[a-zA-Z0-9]{3,100}$"
-    Description: Nom du projet
+    Description: Nom du projet (3-100 caracteres alphanumeriques) - utilise pour nommer toutes les ressources
 
   EnvironmentType:
     Type: String
     AllowedValues: [Test, Prod]
-    Description: Type d'environnement
+    Description: Type d'environnement (Test ou Prod) - affecte la configuration des ressources
 
-  KeyPairName:
-    Type: AWS::EC2::KeyPair::KeyName
-    Description: Cle SSH pour NAT
-
+  # Network Configuration
   VPCCIDR:
     Type: String
     Default: 10.0.0.0/16
-    Description: CIDR VPC
+    Description: Bloc CIDR pour le VPC (ex. 10.0.0.0/16 = 65,536 adresses IP)
 
   SubnetBits:
     Type: Number
     Default: 8
     MinValue: 4
     MaxValue: 16
-    Description: Nombre de bits CIDR pour les sous-reseaux
+    Description: Nombre de bits CIDR pour les sous-reseaux (8 = 256 IPs par sous-reseau)
 
+  # Availability Zones
   AvailabilityZones:
     Type: List<AWS::EC2::AvailabilityZone::Name>
     Default: "us-east-1a,us-east-1b"
     AllowedValues:
       - us-east-1a
       - us-east-1b
-    Description: Liste des AZ. Une pour Test, deux pour Prod.
+    Description: Zones de disponibilite AWS - une pour Test, deux pour Prod (haute disponibilite)
+
+  # SSH Access for NAT Instance
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Cle SSH EC2 pour acceder a l'instance NAT (requis pour la connectivite des sous-reseaux prives)
 
 Conditions:
   IsProd: !Equals [!Ref EnvironmentType, "Prod"]
