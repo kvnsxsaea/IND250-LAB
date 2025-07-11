@@ -30,9 +30,7 @@ Parameters:
 
   AvailabilityZones:
     Type: List<AWS::EC2::AvailabilityZone::Name>
-    Default: 
-      - us-east-1a
-      - us-east-1b
+    Default: "us-east-1a,us-east-1b"
     AllowedValues:
       - us-east-1a
       - us-east-1b
