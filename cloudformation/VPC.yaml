@@ -1,0 +1,171 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: VPC avec 3 sous-reseaux (1 public, 2 prives) avec table de routage publique.
+
+Parameters:
+  ProjectName:
+    Type: String
+    AllowedPattern: "^[a-zA-Z0-9]{3,100}$"
+    Description: Nom du projet
+
+  EnvironmentType:
+    Type: String
+    AllowedValues: [Test, Prod]
+    Description: Type d'environnement
+
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Cle SSH pour NAT
+
+  VPCCIDR:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: CIDR VPC
+
+  SubnetBits:
+    Type: Number
+    Default: 8
+    MinValue: 4
+    MaxValue: 16
+    Description: Nombre de bits CIDR pour les sous-reseaux
+
+  AvailabilityZones:
+    Type: List<AWS::EC2::AvailabilityZone::Name>
+    Default: 
+      - us-east-1a
+      - us-east-1b
+    AllowedValues:
+      - us-east-1a
+      - us-east-1b
+    Description: Liste des AZ. Une pour Test, deux pour Prod.
+
+Conditions:
+  IsProd: !Equals [!Ref EnvironmentType, "Prod"]
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${EnvironmentType}-vpc"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-igw"
+
+  AttachIGW:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-rtb-public"
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !Ref AvailabilityZones]
+      CidrBlock: !Select [0, !Cidr [!Ref VPCCIDR, 6, !Ref SubnetBits]]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-subnet-public"
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !Ref AvailabilityZones]
+      CidrBlock: !Select [1, !Cidr [!Ref VPCCIDR, 6, !Ref SubnetBits]]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-subnet-private1"
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !Ref AvailabilityZones]
+      CidrBlock: !Select [2, !Cidr [!Ref VPCCIDR, 6, !Ref SubnetBits]]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-subnet-private2"
+
+  PublicSubnetRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  JumpBoxSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Acces SSH pour jumpbox
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-JumpBoxSG"
+
+  NATStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: "https://kana-ind250-ets.s3.us-east-1.amazonaws.com/NatInstance.json"
+      Parameters:
+        VpcId: !Ref VPC
+        PublicSubnetId: !Ref PublicSubnet
+        KeyPairName: !Ref KeyPairName
+        PrivatesSubnetsID:
+          !Join [",", [!Ref PrivateSubnet1, !Ref PrivateSubnet2]]
+
+Outputs:
+  VPCID:
+    Value: !Ref VPC
+    Export:
+      Name: MenuGraphique-VPCID
+
+  PublicSubnetID:
+    Value: !Ref PublicSubnet
+    Export:
+      Name: MenuGraphique-PublicSubnet
+
+  PrivateSubnet1ID:
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: MenuGraphique-PrivateSubnet1
+
+  PrivateSubnet2ID:
+    Value: !Ref PrivateSubnet2
+    Export:
+      Name: MenuGraphique-PrivateSubnet2
+
+  JumpBoxSGID:
+    Value: !Ref JumpBoxSG
+    Export:
+      Name: MenuGraphique-JumpBoxSGID

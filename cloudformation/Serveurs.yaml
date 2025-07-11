@@ -1,0 +1,213 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Deploiement des serveurs Menu Graphique avec configuration dynamique
+
+Mappings:
+  RegionMap:
+    us-east-1:
+      AMI: ami-0c2b8ca1dad447f8a
+    us-west-2:
+      AMI: ami-05ee755be0cd7555c
+
+Parameters:
+  EnvironmentType:
+    Type: String
+    AllowedValues: [Test, Prod]
+    Description: Type d'environnement (Test ou Prod)
+
+  SSHKeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Nom de la cle SSH EC2
+
+  InstallS3Bucket:
+    Type: String
+    MinLength: 3
+    AllowedPattern: "^[a-zA-Z0-9\\-]+$"
+    ConstraintDescription: Doit etre alphanumerique avec tirets.
+
+  DNSPrefix:
+    Type: String
+    AllowedPattern: "^([a-z]+\\.)?$"
+    ConstraintDescription: Doit etre vide ou une chaine de lettres minuscules se terminant par un point.
+
+  DBUser:
+    Type: String
+    MinLength: 3
+    AllowedPattern: "^[a-zA-Z0-9]+$"
+    ConstraintDescription: Doit etre alphanumerique et avoir au moins 3 caracteres.
+
+  DBPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    AllowedPattern: "(?=.*[a-z])(?=.*[A-Z])(?=.*[^a-zA-Z0-9]).{8,}"
+    ConstraintDescription: Doit contenir une minuscule, majuscule, caractere special, et min 8 caracteres.
+
+  WebUserDataS3:
+    Type: String
+    Description: S3 bucket link pointing to the Website userdata script
+    AllowedPattern: "^s3://[a-zA-Z0-9\\-\\.]+/.*\\.sh$"
+    ConstraintDescription: Must be a valid S3 path to a .sh file (e.g., s3://bucket/path/Website.sh)
+
+  ApiUserDataS3:
+    Type: String
+    Description: S3 bucket link pointing to the WebService userdata script
+    AllowedPattern: "^s3://[a-zA-Z0-9\\-\\.]+/.*\\.sh$"
+    ConstraintDescription: Must be a valid S3 path to a .sh file (e.g., s3://bucket/path/WebService.sh)
+
+  DBUserDataS3:
+    Type: String
+    Description: S3 bucket link pointing to the MariaDB userdata script
+    AllowedPattern: "^s3://[a-zA-Z0-9\\-\\.]+/.*\\.sh$"
+    ConstraintDescription: Must be a valid S3 path to a .sh file (e.g., s3://bucket/path/MariaDB.sh)
+
+  LicenceUserDataS3:
+    Type: String
+    Description: S3 bucket link pointing to the SecureServer userdata script
+    AllowedPattern: "^s3://[a-zA-Z0-9\\-\\.]+/.*\\.sh$"
+    ConstraintDescription: Must be a valid S3 path to a .sh file (e.g., s3://bucket/path/SecureServer.sh)
+
+Conditions:
+  IsProd: !Equals [ !Ref EnvironmentType, "Prod" ]
+
+Resources:
+
+  WebLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub MenuGraphique-Web-${EnvironmentType}
+      LaunchTemplateData:
+        InstanceType: !If [ IsProd, t3.small, t3.micro ]
+        KeyName: !Ref SSHKeyName
+        ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMI]
+        IamInstanceProfile:
+          Name: LabInstanceProfile
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            # Download and execute Website script with S3 bucket argument
+            aws s3 cp ${WebUserDataS3} /tmp/Website.sh
+            chmod +x /tmp/Website.sh
+            /tmp/Website.sh s3://${InstallS3Bucket}/ind250-MenuGraphique/
+
+  ApiLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub MenuGraphique-Api-${EnvironmentType}
+      LaunchTemplateData:
+        InstanceType: !If [ IsProd, t3.large, t3.small ]
+        KeyName: !Ref SSHKeyName
+        ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMI]
+        IamInstanceProfile:
+          Name: LabInstanceProfile
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            # Download and execute WebService script with S3 bucket argument
+            aws s3 cp ${ApiUserDataS3} /tmp/WebService.sh
+            chmod +x /tmp/WebService.sh
+            /tmp/WebService.sh s3://${InstallS3Bucket}/ind250-Artifact-main/
+
+  DBLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub MenuGraphique-DB-${EnvironmentType}
+      LaunchTemplateData:
+        InstanceType: !If [ IsProd, t3.xlarge, t3.small ]
+        KeyName: !Ref SSHKeyName
+        ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMI]
+        IamInstanceProfile:
+          Name: LabInstanceProfile
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            # Download and execute MariaDB script (no S3 bucket argument needed)
+            aws s3 cp ${DBUserDataS3} /tmp/MariaDB.sh
+            chmod +x /tmp/MariaDB.sh
+            /tmp/MariaDB.sh
+
+  LicenceLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub MenuGraphique-Licence-${EnvironmentType}
+      LaunchTemplateData:
+        InstanceType: t3.small
+        KeyName: !Ref SSHKeyName
+        ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMI]
+        IamInstanceProfile:
+          Name: LabInstanceProfile
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            # Download and execute SecureServer script with S3 bucket argument
+            aws s3 cp ${LicenceUserDataS3} /tmp/SecureServer.sh
+            chmod +x /tmp/SecureServer.sh
+            /tmp/SecureServer.sh s3://${InstallS3Bucket}/ind250-SecureServer/
+
+  WebServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref WebLaunchTemplate
+        Version: !GetAtt WebLaunchTemplate.LatestVersionNumber
+      SubnetId: !ImportValue MenuGraphique-PublicSubnet
+      Tags:
+        - Key: Name
+          Value: !Sub ${DNSPrefix}www
+
+  ApiServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref ApiLaunchTemplate
+        Version: !GetAtt ApiLaunchTemplate.LatestVersionNumber
+      SubnetId: !ImportValue MenuGraphique-PublicSubnet
+      Tags:
+        - Key: Name
+          Value: !Sub ${DNSPrefix}api
+
+  DBServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref DBLaunchTemplate
+        Version: !GetAtt DBLaunchTemplate.LatestVersionNumber
+      SubnetId: !ImportValue MenuGraphique-PrivateSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub ${DNSPrefix}bd
+
+  LicenceServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LicenceLaunchTemplate
+        Version: !GetAtt LicenceLaunchTemplate.LatestVersionNumber
+      SubnetId: !ImportValue MenuGraphique-PrivateSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub ${DNSPrefix}licence
+
+Outputs:
+  WebPublicIP:
+    Description: IP publique du serveur Web
+    Value: !GetAtt WebServerInstance.PublicIp
+    Export:
+      Name: !Sub ${AWS::StackName}-WebPublicIP
+
+  ApiPublicIP:
+    Description: IP publique du serveur API
+    Value: !GetAtt ApiServerInstance.PublicIp
+    Export:
+      Name: !Sub ${AWS::StackName}-ApiPublicIP
+
+  DBPrivateIP:
+    Description: IP privee du serveur BD
+    Value: !GetAtt DBServerInstance.PrivateIp
+    Export:
+      Name: !Sub ${AWS::StackName}-DBPrivateIP
+
+  LicencePrivateIP:
+    Description: IP privee du serveur Licence
+    Value: !GetAtt LicenceServerInstance.PrivateIp
+    Export:
+      Name: !Sub ${AWS::StackName}-LicencePrivateIP
